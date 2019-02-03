@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEditor.Animations;
 
 public class PlayerInteract : MonoBehaviour {
 
@@ -18,6 +19,7 @@ public class PlayerInteract : MonoBehaviour {
     public GameObject interactCamera;
     GameObject interactObject;
 
+    public int interactType = 0;
 
     Transform interactObjectLocation;
     Vector3 interactObjectStart;
@@ -28,9 +30,15 @@ public class PlayerInteract : MonoBehaviour {
     [Tooltip("Speed with which an interactible moves into player's view when the player is interacting with it.")]
     public float interactMoveSpeed = 1f;
 
-    bool canInteract = false;
-    bool interacting = false;
+    public bool canInteract = false;
+    public bool interacting = false;
     float lastTime;
+
+    Animator animator;
+    Animation animationComp;
+    public AnimationClip interactClip;
+
+    int frameCount = 0;
 
 	// Use this for initialization
 	void Start () {
@@ -65,6 +73,16 @@ public class PlayerInteract : MonoBehaviour {
                 Debug.LogWarning("FreeLookCameraRig NOT found.  Make sure object is attached to player object and that the name matches the name used in 'PlayerInteract' script.");
             }
         }
+
+        if (!(animator = GetComponent<Animator>()))
+        {
+            Debug.LogWarning("No animator found on Player object.");
+        }
+
+        if (!(animationComp = GetComponent<Animation>()))
+        {
+            Debug.LogWarning("No animation component found on Player object.");
+        }
     }
 	
 	// Update is called once per frame
@@ -79,19 +97,42 @@ public class PlayerInteract : MonoBehaviour {
 
             interacting = true;
 
-            tpControl.canMove = false;
+            tpControl.canMove = false;            
 
-            objIndicator.SetActive(false);
+            if (interactType == 1)
+            {
+                objIndicator.SetActive(false);
+            }
+            else if (interactType == 2)
+            {
+                animator.SetFloat("interactIndex", interactObject.GetComponent<SceneInteract>().interactIndex);
+            }            
         }
 
         if (interacting)
         {
-            //move interact object to interact locataion
-            interactObject.transform.position = Vector3.MoveTowards(interactObject.transform.position, interactObjectLocation.position, step);
+            if (interactType == 1)
+            {
+                //move interact object to interact locataion
+                interactObject.transform.position = Vector3.MoveTowards(interactObject.transform.position, interactObjectLocation.position, step);
 
-            interactCamera.SetActive(true);
-            cameraRig.SetActive(false);
-            interactCamera.transform.LookAt(interactObject.transform);
+                interactCamera.SetActive(true);
+                cameraRig.SetActive(false);
+                interactCamera.transform.LookAt(interactObject.transform);
+            }
+            else if (interactType == 2)
+            {
+                animator.Play("Interacting");
+
+                frameCount++;
+                if (frameCount >= 20)
+                {
+                    frameCount = 0;
+                    interacting = false;
+                    tpControl.canMove = true;
+                }
+            }
+
         }
 
         //get interact input if player is interacting --> Stop interacting
@@ -99,14 +140,18 @@ public class PlayerInteract : MonoBehaviour {
         {
             lastTime = Time.time;
             interacting = false;
-            interactObject.transform.position = interactObjectStart;
 
-            interactCamera.SetActive(false);
-            cameraRig.SetActive(true);
+            if (interactType == 1)
+            {
+                interactObject.transform.position = interactObjectStart;
+
+                interactCamera.SetActive(false);
+                cameraRig.SetActive(true);                
+
+                objIndicator.SetActive(true);
+            }
 
             tpControl.canMove = true;
-
-            objIndicator.SetActive(true);
         }
     }
 
@@ -115,11 +160,24 @@ public class PlayerInteract : MonoBehaviour {
         if (other.tag == "InteractObject")
         {
             interactObject = other.gameObject;
-            interactObjectStart = other.GetComponent<ObjectInteract>().startLocation;
 
             canInteract = true;
-            objIndicator = other.transform.GetChild(0).gameObject;
-            objIndicator.SetActive(true);
+
+            if (interactObject.GetComponent<ObjectInteract>())
+            {
+                interactObjectStart = other.GetComponent<ObjectInteract>().startLocation;
+                
+                objIndicator = other.transform.GetChild(0).gameObject;
+                objIndicator.SetActive(true);
+
+                interactType = 1;
+            }
+            else if (interactObject.GetComponent<SceneInteract>())
+            {
+                interactClip = interactObject.GetComponent<SceneInteract>().interactAnim;
+
+                interactType = 2;
+            }                      
         }
     }
 
@@ -127,10 +185,14 @@ public class PlayerInteract : MonoBehaviour {
     {
         if (other.tag == "InteractObject")
         {
-            objIndicator.SetActive(false);
-
             canInteract = false;
+
+            interactType = 0;
+
+            if (other.GetComponent<ObjectInteract>())
+            {
+                objIndicator.SetActive(false);                
+            }
         }
     }
-
 }
