@@ -36,10 +36,11 @@ public class PlayerInteract : MonoBehaviour {
 
     Animator animator;
     AnimationClip interactClip;
+    public float interactLength;
     AnimatorOverrideController animatorOverrideController;
     RuntimeAnimatorController runtimeAnimator;
 
-    int frameCount = 0;
+    public float timeCount = 0;
 
 	// Use this for initialization
 	void Start () {
@@ -142,10 +143,10 @@ public class PlayerInteract : MonoBehaviour {
                 //run the interaction state
                 animator.Play("Interacting");
                 //give the animation time to play before restoring player control
-                frameCount++;
-                if (frameCount >= 20)
+                timeCount+= Time.deltaTime;
+                if (timeCount >= interactLength)
                 {
-                    frameCount = 0;
+                    timeCount = 0;
                     interacting = false;
                     tpControl.canMove = true;
                 }
@@ -197,6 +198,7 @@ public class PlayerInteract : MonoBehaviour {
             else if (interactObject.GetComponent<SceneInteract>())
             {
                 interactClip = interactObject.GetComponent<SceneInteract>().interactAnim;
+                interactLength = interactClip.length - 0.5f;
 
                 interactType = 2;
             }                      

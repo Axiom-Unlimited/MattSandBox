@@ -13,7 +13,7 @@ public class ThirdPersonControl : MonoBehaviour {
     [Tooltip("If checked the player character will stay crouched after the button is pressed and stand when pressed again.")]
     public bool toggleCrouch = true;
 
-    [HideInInspector]
+    //[HideInInspector] 
     public bool canMove = true;
 
     //change required component if we switch from using Unity's Third Person Character script
