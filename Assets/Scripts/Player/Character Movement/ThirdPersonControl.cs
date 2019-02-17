@@ -1,11 +1,8 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 //Original script: "ThirdPersonUserControl" from Unity Standard Assets
 
-//change required component if we switch from using Unity's Third Person Character script
-[RequireComponent(typeof(UnityStandardAssets.Characters.ThirdPerson.ThirdPersonCharacter))]
+[RequireComponent(typeof(PlayerCharacter))]
 
 public class ThirdPersonControl : MonoBehaviour {
 
@@ -88,7 +85,6 @@ public class ThirdPersonControl : MonoBehaviour {
         }
 
         //get the third person character ( this should never be null due to require component )
-        //change required component if we switch from using Unity's Third Person Character script
         playerCharacter = GetComponent<PlayerCharacter>();
 
         layerMask = ~layerMask;
