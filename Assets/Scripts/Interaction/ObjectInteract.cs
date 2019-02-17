@@ -1,14 +1,13 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class ObjectInteract : MonoBehaviour {
 
     GameObject indicator;
     [HideInInspector]
     public Vector3 startLocation;
-
-	// Use this for initialization
+    [HideInInspector]
+    public Quaternion startRotation;
+    
 	void Start () {
 
         if (!(indicator = this.gameObject.transform.GetChild(0).gameObject))
@@ -19,5 +18,6 @@ public class ObjectInteract : MonoBehaviour {
         indicator.SetActive(false);
 
         startLocation = this.transform.position;
+        startRotation = transform.rotation;
 	}
 }

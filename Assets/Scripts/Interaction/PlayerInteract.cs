@@ -1,7 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-using UnityEditor.Animations;
+﻿using UnityEngine;
 
 public class PlayerInteract : MonoBehaviour {
 
@@ -19,10 +16,13 @@ public class PlayerInteract : MonoBehaviour {
     public GameObject interactCamera;
     GameObject interactObject;
 
-    public int interactType = 0;
+    int interactType = 0;
+    [Tooltip("The speed with which the interactable object is rotated.")]
+    public float interactRotationRate = 1;
 
     Transform interactObjectLocation;
     Vector3 interactObjectStart;
+    Quaternion interactObjectRotaion;
 
     //player/character control script
     ThirdPersonControl tpControl;
@@ -30,13 +30,14 @@ public class PlayerInteract : MonoBehaviour {
     [Tooltip("Speed with which an interactible moves into player's view when the player is interacting with it.")]
     public float interactMoveSpeed = 1f;
 
-    public bool canInteract = false;
-    public bool interacting = false;
+    bool canInteract = false;
+    bool interacting = false;
     float lastTime;
 
     Animator animator;
-    Animation animationComp;
-    public AnimationClip interactClip;
+    AnimationClip interactClip;
+    AnimatorOverrideController animatorOverrideController;
+    RuntimeAnimatorController runtimeAnimator;
 
     int frameCount = 0;
 
@@ -79,10 +80,8 @@ public class PlayerInteract : MonoBehaviour {
             Debug.LogWarning("No animator found on Player object.");
         }
 
-        if (!(animationComp = GetComponent<Animation>()))
-        {
-            Debug.LogWarning("No animation component found on Player object.");
-        }
+        //create an override controller to be used when assigning the proper interaction animation clip
+        animatorOverrideController = new AnimatorOverrideController(animator.runtimeAnimatorController);
     }
 	
 	// Update is called once per frame
@@ -99,14 +98,29 @@ public class PlayerInteract : MonoBehaviour {
 
             tpControl.canMove = false;            
 
+            //determine the type of interaction object
+                //1: single object that is zoomed in and can be investigated by player
+                //2: more elaborate interaction that plays a specific animation when activated
             if (interactType == 1)
             {
                 objIndicator.SetActive(false);
             }
             else if (interactType == 2)
             {
-                animator.SetFloat("interactIndex", interactObject.GetComponent<SceneInteract>().interactIndex);
-            }            
+                //animator.SetFloat("interactIndex", interactObject.GetComponent<SceneInteract>().interactIndex);
+
+                //set the interaction clip on the player object equal to the interaction clip on the scene interact object
+                interactClip = interactObject.GetComponent<SceneInteract>().interactAnim;
+                                
+                //set the interaction animation (motion) in the override controller to the newly assigned interaction clip
+                animatorOverrideController["DefaultPickUp"] = interactClip;
+                //set the controller in the animator to the override controller
+                animator.runtimeAnimatorController = animatorOverrideController;
+            }      
+            else
+            {
+                Debug.LogWarning("Unknown interact type.");
+            }
         }
 
         if (interacting)
@@ -115,15 +129,19 @@ public class PlayerInteract : MonoBehaviour {
             {
                 //move interact object to interact locataion
                 interactObject.transform.position = Vector3.MoveTowards(interactObject.transform.position, interactObjectLocation.position, step);
+                //interactObject.transform.LookAt(interactCamera.transform);
 
                 interactCamera.SetActive(true);
                 cameraRig.SetActive(false);
                 interactCamera.transform.LookAt(interactObject.transform);
+                //rotate the object being interacted with
+                interactObject.transform.Rotate(interactRotationRate * Input.GetAxis("Vertical"), interactRotationRate * Input.GetAxis("Horizontal"), 0);
             }
             else if (interactType == 2)
             {
+                //run the interaction state
                 animator.Play("Interacting");
-
+                //give the animation time to play before restoring player control
                 frameCount++;
                 if (frameCount >= 20)
                 {
@@ -141,16 +159,19 @@ public class PlayerInteract : MonoBehaviour {
             lastTime = Time.time;
             interacting = false;
 
+            //reset the object that was being interacted with
             if (interactType == 1)
             {
                 interactObject.transform.position = interactObjectStart;
+                interactObject.transform.rotation = interactObjectRotaion;
 
                 interactCamera.SetActive(false);
                 cameraRig.SetActive(true);                
 
                 objIndicator.SetActive(true);
+                
             }
-
+            //return player control
             tpControl.canMove = true;
         }
     }
@@ -166,6 +187,7 @@ public class PlayerInteract : MonoBehaviour {
             if (interactObject.GetComponent<ObjectInteract>())
             {
                 interactObjectStart = other.GetComponent<ObjectInteract>().startLocation;
+                interactObjectRotaion = other.GetComponent<ObjectInteract>().startRotation;
                 
                 objIndicator = other.transform.GetChild(0).gameObject;
                 objIndicator.SetActive(true);
