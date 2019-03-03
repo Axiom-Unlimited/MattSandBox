@@ -8,6 +8,9 @@ using UnityEngine;
 
 public class PlayerCharacter : MonoBehaviour {
 
+    #region Variables
+
+    #region Player Compontents
     Rigidbody rb;
 
     CapsuleCollider capsule;
@@ -19,10 +22,13 @@ public class PlayerCharacter : MonoBehaviour {
     float camAngle;
 
     Animator animator;
+    #endregion
+
     //dampTime to be used when setting the float values for the movement animations.  
     //acts as a value to smooth the setting of the float value similar to a Lerp
     float animDampTime = 0.1f;
 
+    #region Movement
     //variables to be used when setting the float values for the animator
     float moveX;
     float moveY;
@@ -34,8 +40,14 @@ public class PlayerCharacter : MonoBehaviour {
     public float rotationSpeed = 10f;
 
     bool crouched;
+    
+    [HideInInspector]
+    public Vector3 coverPerp;
+    #endregion
 
-	void Start () {
+    #endregion
+
+    void Start () {
 
         //check for and get main camera
         if (Camera.main != null)
@@ -63,32 +75,38 @@ public class PlayerCharacter : MonoBehaviour {
     public void Move(Vector3 move, bool crouch, bool inCover)
     {
         #region Face Forward
-        //get angle between player character's forward and the camera's forward
-        camAngle = Vector3.SignedAngle(transform.forward, cam.forward, Vector3.up);
-        //vector going from player towards camera's forward
-        lookVect = new Vector3(transform.position.x + cam.forward.x, transform.position.y, transform.position.z + cam.forward.z);
-        //the target direction for the player to rotate towards
-        targetDirection = (lookVect - transform.position).normalized;
-        //quaternion representing the rotation to the targetDirection
-        lookRotation = Quaternion.LookRotation(targetDirection);
+        if (!inCover)
+        {
+            //get angle between player character's forward and the camera's forward
+            camAngle = Vector3.SignedAngle(transform.forward, cam.forward, Vector3.up);
+            //vector going from player towards camera's forward
+            lookVect = new Vector3(transform.position.x + cam.forward.x, transform.position.y, transform.position.z + cam.forward.z);
+            //the target direction for the player to rotate towards
+            targetDirection = (lookVect - transform.position).normalized;
+            //quaternion representing the rotation to the targetDirection
+            lookRotation = Quaternion.LookRotation(targetDirection);
+        }
+        else if (inCover)
+        {
+            //make the target direction the inverse of the cover's normal so that the player is facing the cover object
+            targetDirection = coverPerp;
+            lookRotation = Quaternion.LookRotation(targetDirection);
+        }
 
         //check for input and rotate when player tries to move
         if (move.x != 0 || move.z != 0)
         {
-            if (!inCover)
-            {
                 //smoothly slerp from current rotation to target rotation
                 transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * rotationSpeed);
-            }
+            
         }
-
         #endregion
 
         #region Handle Movement
         //normalize the movement vector so that it doesn't exceed animator parameter requirements
         if (move.magnitude > 1f) move.Normalize();
 
-        //use the movement vector's (x,z) are assigned to the Cartesian plane used in the animator blend tree (x,y)
+        //the movement vector's (x,z) are assigned to the Cartesian plane used in the animator blend tree (x,y)
         moveX = move.x;
         moveY = move.z;
         //set animator (x,y) values so that the correct animation is played from the blend tree

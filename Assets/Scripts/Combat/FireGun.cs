@@ -126,7 +126,7 @@ public class FireGun : MonoBehaviour {
             canShoot = false;
             gunPS.Play();
             shotsFired++;
-            Debug.Log("Firing");
+            //Debug.Log("Firing");
             if (!fullAuto) fire = false;
         }
     }
