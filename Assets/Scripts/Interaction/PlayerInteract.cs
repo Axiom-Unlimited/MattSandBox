@@ -130,7 +130,6 @@ public class PlayerInteract : MonoBehaviour {
             {
                 //move interact object to interact locataion
                 interactObject.transform.position = Vector3.MoveTowards(interactObject.transform.position, interactObjectLocation.position, step);
-                //interactObject.transform.LookAt(interactCamera.transform);
 
                 interactCamera.SetActive(true);
                 cameraRig.SetActive(false);

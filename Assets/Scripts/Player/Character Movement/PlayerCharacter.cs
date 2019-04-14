@@ -40,6 +40,7 @@ public class PlayerCharacter : MonoBehaviour {
     public float rotationSpeed = 10f;
 
     bool crouched;
+    float coverHeight;
     
     [HideInInspector]
     public Vector3 coverPerp;
@@ -72,7 +73,7 @@ public class PlayerCharacter : MonoBehaviour {
     /// <summary> Pass in a Vector3 (move) that will be used to set proper parameter values in the standard movement blend tree.
     /// <para> The "move" vector used so that moveX and moveY in the animator will be assigned as: moveX = move.x and moveY = move.z.</para>
     /// </summary>
-    public void Move(Vector3 move, bool crouch, bool inCover)
+    public void Move(Vector3 move,float coverHeight, bool crouch, bool inCover)
     {
         #region Face Forward
         if (!inCover)
@@ -88,6 +89,7 @@ public class PlayerCharacter : MonoBehaviour {
         }
         else if (inCover)
         {
+            
             //make the target direction the inverse of the cover's normal so that the player is facing the cover object
             targetDirection = coverPerp;
             lookRotation = Quaternion.LookRotation(targetDirection);
@@ -112,12 +114,14 @@ public class PlayerCharacter : MonoBehaviour {
         //set animator (x,y) values so that the correct animation is played from the blend tree
         animator.SetFloat("moveX", moveX, animDampTime, Time.deltaTime);
         animator.SetFloat("moveY", moveY, animDampTime, Time.deltaTime);
+        animator.SetFloat("coverHeight", coverHeight);
         #endregion
 
         #region Handle Crouch
         if (crouch)
         {
             if (crouched) return;
+            //animator.SetFloat("coverHeight", coverHeight);
             animator.SetBool("crouched", crouch);
             
             capsule.height = capsule.height / 2f;
@@ -127,6 +131,7 @@ public class PlayerCharacter : MonoBehaviour {
         }
         else
         {
+            //animator.SetFloat("coverHeight", coverHeight);
             animator.SetBool("crouched", crouch);
                         
             capsule.height = capsuleHeight;

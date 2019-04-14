@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using UnityEngine;
 
 //Original script: "ThirdPersonUserControl" from Unity Standard Assets
 
@@ -18,7 +19,7 @@ public class ThirdPersonControl : MonoBehaviour {
     public bool toggleCrouch = true;
     [HideInInspector]
     public bool canMove = true;
-    bool camRelative;
+    public bool camRelative;
     #endregion
 
     #region Player and Camera Related Dependencies
@@ -28,7 +29,6 @@ public class ThirdPersonControl : MonoBehaviour {
     private Vector3 m_CamForward;             // The current forward direction of the camera
     [HideInInspector]
     public Vector3 m_Move;                    // the world-relative desired move direction, calculated from the camForward and user input.
-    private bool m_Jump;
     #endregion
 
     #region Movement Variables
@@ -80,23 +80,59 @@ public class ThirdPersonControl : MonoBehaviour {
     float zScale;        
     
     [Header("Cover Check Values")]
-    [Tooltip("The scaling value for the cover check rays.  The rays are used while in cover to detect when the player leaves cover.  Smaller value means a narrower angle between the rays.")]
-    public float coverCheckScale = 30f;
+    [Tooltip("The length of the rays used to check if player is still in cover.")]
+    public float coverCheckScale = 2f;
     Vector3 coverCheckTargetLeft;
     Vector3 coverCheckTargetRight;
     //layerMask for cover check set to detect only layer 9 (Cover)
-    int coverLayerMask = 1 << 9;
-    bool turnLeft;
+    //int coverLayerMask = 1 << 9;
+    public LayerMask coverLayerMask;
     float coverCamAngle;
     bool coverCheck = false;
 
-    public bool inCover = false;
-    #endregion    
+    bool inCover = false;
+    #endregion
+
+    #region Cover Hight Variables
+    float crouchHeight;
+    [Tooltip("The amount used to increment crouch height.  Used to smooth transition between standing, crouch, and cover peek.  Higher number means faster transition.")]
+    public float crouchHeightIncrement = 0.09f;
+    float crouchHeightTarget;
+    float coverPeekTarget;
+
+    float chCheckStart = 2f;
+    float chCheckDist;
+
+    RaycastHit chCheckHit;
+    Vector3 chCheckOrigin;
+    Vector3 chcCheckEnd;
+    #endregion
+
+    #region Cover Gap Switch Variables
+    [Header("Cover Gap Check Values")]
+    public bool coverOnRight;
+    public int coverSideScale;
+    public float gapCheckHeight;
+    public float gapStartDistance;
+    public float gapPerpDistance;
+    public float gapMaxDistance;
+
+    public float gapDistanceAddition;
+    public float switchDestinationDistance;
+
+    Vector3 gapCheckStart;
+    Vector3 gapCheckPerp;
+    Vector3 gapCheckMax;
+    RaycastHit gapCheckHit;
+    Vector3 gapSwitchDestination;
+
+    public bool canSwitchCover;
+    public bool switchingCover;
+    #endregion
 
     [Space]
     [Tooltip("Check to draw debug gizmos in OnDrawGizmos.")]
     public bool drawGizmos;
-
     #endregion
 
     private void Start()
@@ -121,17 +157,7 @@ public class ThirdPersonControl : MonoBehaviour {
 
     private void Update()
     {
-        #region Jump Input
-        //if (canJump)
-        //{
-        //    if (!m_Jump)
-        //    {
-        //        m_Jump = Input.GetButtonDown("Jump");
-        //    }
-        //}   
-        #endregion
-
-        #region Crouch Input
+        #region Inputs
         //handle crouch based on toggleCrouch choice
         if (toggleCrouch)
         {
@@ -144,6 +170,12 @@ public class ThirdPersonControl : MonoBehaviour {
         {
             crouch = Input.GetButton("Crouch");
         }
+
+        //check for vaulting ability and input
+        if (canVault && Input.GetButtonDown("Jump"))
+        {
+            vaulting = true;
+        }
         #endregion
 
         #region Vault Check
@@ -155,8 +187,8 @@ public class ThirdPersonControl : MonoBehaviour {
         //draw ray for obstacle detection
         Debug.DrawLine(vaultRayOrigin, vaultRayTarget, Color.green);
         //cast ray checking for obstacles
-        if (Physics.Raycast(vaultRayOrigin, new Vector3(transform.forward.x * vaultDistance, transform.forward.y, 
-                            transform.forward.z * vaultDistance), 
+        if (Physics.Raycast(vaultRayOrigin, new Vector3(transform.forward.x * vaultDistance, transform.forward.y,
+                            transform.forward.z * vaultDistance),
                             out vaultCheckHit, Vector3.Distance(vaultRayOrigin, vaultRayTarget), layerMask))
         {
             Debug.DrawRay(vaultCheckHit.point, vaultCheckHit.normal, Color.red);
@@ -164,7 +196,7 @@ public class ThirdPersonControl : MonoBehaviour {
 
             hitNormal = vaultCheckHit.normal;
             hitPerp = Vector3.Cross(hitNormal, Vector3.up);
-            
+
             //draw ray for obstacle height detection
             Debug.DrawLine(vaultRayOrigin + new Vector3(0f, vaultHeightLimit, 0f), vaultRayTarget + new Vector3(0f, vaultHeightLimit, 0f), Color.green);
             //cast ray checking for vaultable objects
@@ -182,7 +214,7 @@ public class ThirdPersonControl : MonoBehaviour {
                 //the following rays are used to check the other side of the object that will be vaulted, used to make sure it is safe on the other side
 
                 //ray from the point of collision between the ray and obstacle and the height limit defined by vaultHeightLimit
-                Debug.DrawRay(vaultCheckHit.point, new Vector3 (0f, vaultHeightLimit, 0f));
+                Debug.DrawRay(vaultCheckHit.point, new Vector3(0f, vaultHeightLimit, 0f));
                 if (Physics.Raycast(vaultCheckHit.point, new Vector3(0f, vaultHeightLimit, 0f), vaultHeightLimit, layerMask))
                 {
                     //Debug.Log("Hit 1");
@@ -240,7 +272,7 @@ public class ThirdPersonControl : MonoBehaviour {
         }
         #endregion
 
-        #region Cover Check
+        #region Cover Check      
         //initiate cover if checks pass and player crouches
         if (crouch && obstacle)
         {
@@ -249,20 +281,25 @@ public class ThirdPersonControl : MonoBehaviour {
         else if (!crouch)
         {
             inCover = false;
-        }              
-        
-        //cover checks while already in cover
-        if (inCover)
+        }
+
+        //run cover checks while already in cover
+        if (inCover && canMove)
         {
             //cast rays to the left and right of player that will check for cover objects while they are in cover
-            coverCheckTargetLeft = vaultRayOrigin + transform.forward + (transform.right * -coverCheckScale);
-            coverCheckTargetRight = vaultRayOrigin + transform.forward + (transform.right * coverCheckScale);
-            Debug.DrawRay(vaultRayOrigin, coverCheckTargetLeft - vaultRayOrigin, Color.cyan);
-            Debug.DrawRay(vaultRayOrigin, coverCheckTargetRight - vaultRayOrigin, Color.cyan);
-            
-            if (Physics.Raycast(vaultRayOrigin, coverCheckTargetLeft - vaultRayOrigin, Vector3.Distance(vaultRayOrigin, coverCheckTargetLeft), coverLayerMask))
-                coverCheck = true;
-            else if (Physics.Raycast(vaultRayOrigin, coverCheckTargetRight - vaultRayOrigin, Vector3.Distance(vaultRayOrigin, coverCheckTargetRight), coverLayerMask))
+            coverCheckTargetLeft = (transform.forward + -transform.right).normalized * coverCheckScale;
+            coverCheckTargetRight = (transform.forward + transform.right).normalized * coverCheckScale;
+
+            //debug cover check rays
+            Debug.DrawRay(vaultRayOrigin, coverCheckTargetLeft, Color.cyan);
+            Debug.DrawRay(vaultRayOrigin, coverCheckTargetRight, Color.cyan);
+            Debug.DrawRay(vaultRayOrigin, transform.right * coverCheckScale, Color.cyan);
+            Debug.DrawRay(vaultRayOrigin, -transform.right * coverCheckScale, Color.cyan);
+
+            if (Physics.Raycast(vaultRayOrigin, coverCheckTargetLeft, coverCheckScale, coverLayerMask) ||
+                Physics.Raycast(vaultRayOrigin, coverCheckTargetRight, coverCheckScale, coverLayerMask) ||
+                Physics.Raycast(vaultRayOrigin, transform.right * coverCheckScale, coverCheckScale, coverLayerMask) ||
+                Physics.Raycast(vaultRayOrigin, -transform.right * coverCheckScale, coverCheckScale, coverLayerMask))
                 coverCheck = true;
             else
                 coverCheck = false;
@@ -278,13 +315,112 @@ public class ThirdPersonControl : MonoBehaviour {
             }
         }
         #endregion
+
+        #region Cover Height Check
+
+        #region Cover Height Raycasts
+        chCheckOrigin = new Vector3(vaultCheckHit.point.x, chCheckStart, vaultCheckHit.point.z);
+        chcCheckEnd = chCheckOrigin + Vector3.down;
+
+        Debug.DrawRay(chCheckOrigin, Vector3.down, Color.blue);
+        if (Physics.Raycast(chCheckOrigin, Vector3.down, out chCheckHit, 2f, layerMask) && obstacle)
+        {
+            chCheckDist = Vector3.Distance(chCheckOrigin, chCheckHit.point);
+
+            if (chCheckDist == 2)
+            {
+                coverPeekTarget = 0;
+            }
+            else
+            {
+                coverPeekTarget = chCheckDist;
+            }
+        }
+        else
+        {
+            chCheckDist = Vector3.Distance(chCheckOrigin, chcCheckEnd);
+        }
+        #endregion
+
+        //check for aiming input
+        if (Input.GetAxis("Aim") > 0 && crouch)
+        {
+            crouchHeightTarget = coverPeekTarget;
+        }
+        else
+        {
+            crouchHeightTarget = 1;
+        }
+
+        //set height while just crouched, no cover, to 1
+        if (crouch && !inCover)
+        {
+            crouchHeightTarget = 1;
+        }
+        else if (!crouch && !inCover)
+        {
+            crouchHeightTarget = 0;
+        }
+
+        //increment cover height toward the target
+        if (crouchHeight < crouchHeightTarget)
+        {
+            crouchHeight = Mathf.Clamp(crouchHeight + crouchHeightIncrement, 0, crouchHeightTarget);
+        }
+        else if (crouchHeight > crouchHeightTarget)
+        {
+            crouchHeight -= crouchHeightIncrement;
+        }
+        #endregion
+
+        #region Cover Gap Check
+        gapCheckStart = transform.position + new Vector3(transform.forward.x * gapStartDistance, transform.forward.y + gapCheckHeight, transform.forward.z * gapStartDistance);
+        if (inCover) { 
+            Debug.DrawRay(gapCheckStart, transform.right * gapPerpDistance * coverSideScale, Color.blue);
+            if (Physics.Raycast(gapCheckStart, transform.right * coverSideScale, gapPerpDistance, coverLayerMask))
+            {
+                canSwitchCover = false;
+            }
+            else
+            {
+                gapCheckPerp = gapCheckStart + transform.right * gapPerpDistance * coverSideScale;
+
+                Debug.DrawRay(gapCheckPerp, transform.forward * gapMaxDistance, Color.blue);
+                if (Physics.Raycast(gapCheckPerp, transform.forward, out gapCheckHit, gapMaxDistance, coverLayerMask))
+                {
+                    canSwitchCover = true;
+
+                    gapCheckMax = gapCheckHit.point;
+
+                    gapSwitchDestination = transform.position + transform.forward * (Vector3.Distance(transform.position, gapCheckHit.point) + gapDistanceAddition);
+
+                    switchDestinationDistance = Vector3.Distance(transform.position, gapSwitchDestination);
+                }
+                else
+                {
+                    canSwitchCover = false;
+                }
+            }
+        }
+
+        if (switchingCover)
+        {
+            switchDestinationDistance = Vector3.Distance(transform.position, gapSwitchDestination);
+        }
+        #endregion
+
+        if (inCover && Input.GetButtonDown("Jump"))
+        {
+            switchingCover = true;
+            StartCoroutine(SwitchCover(gapSwitchDestination));
+        }
     }
 
 
     // Fixed update is called in sync with physics
     private void FixedUpdate()
     {
-        #region Movement Input and Calculation
+        #region Movement
         if (canMove)
         {
             // read inputs
@@ -327,13 +463,15 @@ public class ThirdPersonControl : MonoBehaviour {
 
                 if (coverCamAngle > 90 && coverCamAngle < 270)
                 {
-                    turnLeft = true;
                     playerCharacter.coverPerp = -hitPerp;
+                    coverOnRight = true;
+                    coverSideScale = 1;
                 }
                 else
                 {
-                    turnLeft = false;
                     playerCharacter.coverPerp = hitPerp;
+                    coverOnRight = false;
+                    coverSideScale = -1;
                 }
 
                 //using the angle between the camera and the cover's perpendicular vector calculate the appropriate weights to be applied to each input value
@@ -342,43 +480,40 @@ public class ThirdPersonControl : MonoBehaviour {
                 {
                     xScale = (coverCamAngle / 90) - quad;
                     zScale = 1 - xScale;
+
+                    //combine the input values into one number (coverZ) to be used to move the character forwards or backwards
+                    coverZ = (m_Move.x * xScale) + (m_Move.z * zScale);
                 }
                 else
                 {
                     zScale = (coverCamAngle / 90) - quad;
                     xScale = 1 - zScale;
+
+                    //combine the input values into one number (coverZ) to be used to move the character forwards or backwards
+                    coverZ = -(m_Move.x * xScale) + (m_Move.z * zScale);
                 }
-                
-                //combine the input values into one number (coverZ) to be used to move the character forwards or backwards
-                coverZ = (m_Move.x * xScale) * Mathf.Sign(m_Move.x) + (m_Move.z * zScale);
 
                 coverMove = new Vector3(0f, m_Move.y, coverZ);
 
                 // pass all parameters to the character control script
-                playerCharacter.Move(coverMove, crouch, inCover);
-                m_Jump = false;
+                playerCharacter.Move(coverMove, crouchHeight, crouch, inCover);
             }
             else
             {
                 // pass all parameters to the character control script
-                playerCharacter.Move(m_Move, crouch, inCover);
-                m_Jump = false;
+                playerCharacter.Move(m_Move, crouchHeight, crouch, inCover);
             }
             #endregion
         }
         //disables player movement and sets the character movement to stop
-        else
+        else if (!switchingCover)
         {
-            playerCharacter.Move(Vector3.zero, false, false);
+            playerCharacter.Move(Vector3.zero, 0f, false, false);
         }
         #endregion
 
         #region Vaulting Input and Execution
-        //check for vaulting ability and input
-        if (canVault && Input.GetButtonDown("Jump"))
-        {
-            vaulting = true;
-        }
+        
         //execute vault
         if (vaulting)
         {
@@ -406,25 +541,30 @@ public class ThirdPersonControl : MonoBehaviour {
         #endregion
     }
 
+    IEnumerator SwitchCover(Vector3 destination)
+    {
+        canMove = false;
+
+        while (switchDestinationDistance > 0.5f)
+        {
+            playerCharacter.Move(new Vector3(0f, 0f, 1f), crouchHeight, crouch, inCover);
+
+            yield return null;
+        }
+        canMove = true;
+        switchingCover = false;
+
+        yield return null;
+    }
+
     private void OnDrawGizmos()
     {
         if (drawGizmos)
         {
-            //norm of obstacle
             Gizmos.color = Color.red;
-            Gizmos.DrawWireSphere(hitNormal, 0.1f);
-            //perpendicular to norm
-            Gizmos.color = Color.black;
-            Gizmos.DrawWireSphere(hitPerp, 0.11f);
-            //m_Move
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(m_Move, 0.1f);
-            //coverMove
-            Gizmos.color = Color.blue;
-            Gizmos.DrawWireSphere(coverMove, 0.12f);
-            //cam forward
-            Gizmos.color = Color.cyan;
-            Gizmos.DrawWireSphere(m_CamForward, 0.11f);
+            Gizmos.DrawWireSphere(gapCheckMax, 0.1f);
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(gapSwitchDestination, 0.1f);
         }
     }
 }
